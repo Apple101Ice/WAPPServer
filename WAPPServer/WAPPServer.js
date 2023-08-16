@@ -43,16 +43,16 @@ const generateToken = (user) => {
 };
 
 const broadcastMessageToClient = (recipient, message) => {
-    // console.log(message);
+
     if (recipient.readyState === WebSocket.OPEN) {
         recipient.send(message);
     }
 };
 
-// Helper function to find WebSocket connection by client ID
+
 const findWebSocketConnectionByClientId = (clientId) => {
     let recipient = null;
-    // console.log('in find ws', clientId);
+
     clients.forEach((client, ws) => {
         if (client === clientId) {
             recipient = ws;
@@ -113,14 +113,14 @@ wss.on("connection", (ws) => {
 
             const message = { messageId: generateUniqueId(), messageFrom, senderName, messageTo, groupMessage: true, text: messageContent, timestamp: Date.now() };
             const key1 = `${messageTo}_${memberOf.id}_${memberOf.name}_group`;
-            // const key1 = `${messageFrom}_${messageTo}_${memberOf.name}_group`;
-            // const key2 = `${messageTo}_${messageFrom}_${memberOf.name}_group`;
+
+
 
             chatLogsMap[key1] = chatLogsMap[key1] || [];
-            // chatLogsMap[key2] = chatLogsMap[key2] || [];
+
 
             chatLogsMap[key1].push(message);
-            // chatLogsMap[key2].push(message);
+
 
             const chatGroup = usersGroup.find((group) => group.id === +memberOf.id && group.name === memberOf.name && group.mobile === parseInt(memberOf.mobile));
 
@@ -287,11 +287,11 @@ app.post("/creategroup/:usermobile", passport.authenticate("jwt", { session: fal
 
     const newGroup = { id: newGroupId, contactType: CONTACT_TYPE.GROUP, mobile: parseInt(usermobile), name: groupName, adminName: groupAdmin.name, members: [groupAdmin, ...members] };
 
-    // console.log(newGroup);
+
 
     usersGroup.push(newGroup);
 
-    // Notify all members of the group about the new group
+
     members.forEach((member) => {
 
         const userContactIndex = usersContact.findIndex((contact) => contact.mobile === member.mobile);
@@ -323,9 +323,9 @@ app.post("/updategroup/:groupid/:usermobile/:groupname", passport.authenticate("
         const memberIndex = groupToUpdate.members.findIndex(temp => temp.mobile === +member.mobile);
 
         if (memberIndex >= 0) {
-            groupToUpdate.members.splice(memberIndex, 1); // Remove member
+            groupToUpdate.members.splice(memberIndex, 1);
         } else {
-            groupToUpdate.members.push(member); // Add member
+            groupToUpdate.members.push(member);
         }
 
         res.status(200).json(groupToUpdate);
@@ -380,7 +380,7 @@ function handleMemberDeletion(member) {
             broadcastMessageToClient(recipient, JSON.stringify({ messageType: "updateGroup" }));
         }
     } catch (error) {
-        // Handle error if needed
+
     }
 }
 
