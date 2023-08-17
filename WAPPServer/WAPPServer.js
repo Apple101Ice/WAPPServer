@@ -277,6 +277,20 @@ app.get("/usercontact/:mobile", passport.authenticate("jwt", { session: false })
     }
 });
 
+app.put("/edituser/:usermobile", passport.authenticate("jwt", { session: false }), (req, res) => {
+    const { usermobile } = req.params;
+    const { editName } = req.body;
+    const tempUser = users.find((user) => user.mobile === +usermobile);
+
+    if (tempUser) {
+        tempUser.name = editName;
+        res.status(200).json(tempUser);
+    } else {
+        res.status(400).json('User not found');
+    }
+
+});
+
 app.post("/creategroup/:usermobile", passport.authenticate("jwt", { session: false }), (req, res) => {
     const { usermobile } = req.params;
     const { groupName, members } = req.body;
