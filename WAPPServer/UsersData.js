@@ -60,7 +60,17 @@ const usersContact = [
         contacts: [
             { id: 1, contactType: CONTACT_TYPE.PERSON, name: "Isabelle", mobile: 1376956596 },
             { id: 2, contactType: CONTACT_TYPE.PERSON, name: "Brandon", mobile: 7723881631 },
-            { id: 3, contactType: CONTACT_TYPE.PERSON, name: "Darrell", mobile: 5207119415 },
+            { id: 4, contactType: CONTACT_TYPE.PERSON, name: "Emma", mobile: 6238026737 },
+            { id: 5, contactType: CONTACT_TYPE.PERSON, name: "Mitchell", mobile: 4052819479 },
+        ],
+        memberOf: [],
+    },
+    {
+        id: 6,
+        mobile: 5207119415,
+        contacts: [
+            { id: 1, contactType: CONTACT_TYPE.PERSON, name: "Isabelle", mobile: 1376956596 },
+            { id: 2, contactType: CONTACT_TYPE.PERSON, name: "Brandon", mobile: 7723881631 },
             { id: 4, contactType: CONTACT_TYPE.PERSON, name: "Emma", mobile: 6238026737 },
             { id: 5, contactType: CONTACT_TYPE.PERSON, name: "Mitchell", mobile: 4052819479 },
         ],
