@@ -9,7 +9,7 @@ const TABLES_NAME = {
 };
 
 const pool = new Pool({
-    connectionString: 'host=localhost port=5432 dbname=postgres user=postgres password=qwerty123 sslmode=prefer connect_timeout=10',
+    connectionString: 'postgres://wappdb_user:VIaoW6sURY1QM4vd7ROWGwM6bsbdwGbN@dpg-cjpefue1208c73a1tec0-a.singapore-postgres.render.com/wappdb',
     ssl: {
         rejectUnauthorized: false,
     },
