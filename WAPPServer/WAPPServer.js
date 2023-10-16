@@ -78,7 +78,7 @@ const findWebSocketConnectionByClientId = (clientId) => {
 };
 
 wss.on("connection", (ws) => {
-    console.log("someone connected");
+    // console.log("someone connected");
     let clientId;
 
     const sendmessagetoClient = (client, messageType) => {
@@ -95,7 +95,6 @@ wss.on("connection", (ws) => {
             messageType,
             fileinfo,
             fileData,
-            rawFile,
             messageContent,
             memberof,
         } = JSON.parse(data);
@@ -103,7 +102,7 @@ wss.on("connection", (ws) => {
         if (messageType === MESSAGE_TYPE.SETNAME) {
             clients.set(ws, messageContent);
             clientId = messageContent;
-            console.log("Client connected", messageContent);
+            // console.log("Client connected", messageContent);
         } else if (messageType === MESSAGE_TYPE.PERSON) {
             if (messagefrom && messageto) {
                 const senderId = clients.get(ws);
@@ -198,37 +197,35 @@ wss.on("connection", (ws) => {
 app.get(
     "/chatlog/:messagefrom/:messageto",
     passport.authenticate("jwt", { session: false }),
-    (req, res) => {
-        const { messagefrom, messageto } = req.params;
-        const key = `${messagefrom}_${messageto}_person`;
-
-        const delayTime = 1000;
-
-        setTimeout(() => {
-            getChatData(key).then((result) => {
-                res.json(result.rows);
-            });
-        }, delayTime);
+    async (req, res) => {
+        try {
+            const { messagefrom, messageto } = req.params;
+            const key = `${messagefrom}_${messageto}_person`;
+            const result = await getChatData(key);
+            res.json(result.rows);
+        } catch (error) {
+            console.error("Error getting group chat log:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
     }
 );
 
 app.get(
     "/groupchatlog/:messageto/:id/:groupname",
     passport.authenticate("jwt", { session: false }),
-    (req, res) => {
-        const { messageto, id, groupname } = req.params;
-
-        const key = `${messageto}_${id}_${groupname}_group`;
-
-        const delayTime = 1000;
-
-        setTimeout(() => {
-            getChatData(key).then((result) => {
-                res.json(result.rows);
-            });
-        }, delayTime);
+    async (req, res) => {
+        try {
+            const { messageto, id, groupname } = req.params;
+            const key = `${messageto}_${id}_${groupname}_group`;
+            const result = await getChatData(key);
+            res.json(result.rows);
+        } catch (error) {
+            console.error("Error getting group chat log:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
     }
 );
+
 
 app.post(
     "/deletechat/:usermobile",
@@ -250,7 +247,6 @@ app.post(
                 const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
                     .rows;
                 const selectedGroup = usersGroup.find((group) => group.id === groupid);
-                console.log(selectedGroup);
                 if (selectedGroup) {
                     for (const member of selectedGroup.members) {
                         const recipient = findWebSocketConnectionByClientId(member.mobile);
@@ -277,7 +273,6 @@ app.post(
 
                     for (const num of numbers) {
                         const recipient = findWebSocketConnectionByClientId(num.toString());
-                        console.log(recipient);
                         if (recipient) {
                             broadcastmessagetoClient(
                                 recipient,
@@ -443,9 +438,6 @@ app.delete(
             deleteUserContacts.contacts = deleteUserContacts.contacts.filter(
                 (contact) => contact.mobile !== usermobile
             );
-
-            console.log(JSON.stringify(userContact.contacts.length));
-            console.log(JSON.stringify(deleteUserContacts.contacts.length));
 
             const conditions = [
                 { mobile: userContact.mobile, contacts: userContact.contacts },
@@ -759,8 +751,6 @@ app.delete(
     async (req, res) => {
         const { groupid, groupmobile, groupname, usermobile } = req.params;
 
-        console.log(req.params);
-
         try {
             const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
                 .rows;
@@ -799,8 +789,6 @@ app.delete(
                     group.mobile === groupmobile &&
                     group.name === groupname
             );
-
-            console.log("606", groupIndex);
 
             if (groupIndex >= 0) {
                 userGroupContact.memberof.splice(groupIndex, 1);
@@ -991,7 +979,6 @@ app.put(
                 const memberContact = usersContact.find(
                     (_contact) => _contact.mobile === member.mobile
                 );
-                console.log(memberContact.memberof);
                 const groupIndex = memberContact.memberof.findIndex(
                     (group) =>
                         group.mobile === groupmobile &&
@@ -1008,7 +995,6 @@ app.put(
                         memberContact.memberof[groupIndex].groupimage = binaryData;
                         memberContact.memberof[groupIndex].fileinfo = fileinfo;
                     }
-                    console.log(memberContact);
 
                     const newMemberof = [...memberContact.memberof];
                     newMemberof[groupIndex] = memberContact.memberof[groupIndex];
@@ -1029,7 +1015,7 @@ app.put(
                         );
                     }
                 } else {
-                    console.log("771 Error", member.name, groupIndex, groupToEdit.name);
+
                 }
             }
 
