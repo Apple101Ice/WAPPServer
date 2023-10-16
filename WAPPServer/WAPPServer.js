@@ -344,7 +344,7 @@ app.post(
         const { mobile } = req.body;
 
         if (isNaN(mobile)) {
-            return res.json("Please Enter a Proper Number");
+            return res.json({ error: "Please Enter a Proper Number" });
         }
 
         try {
