@@ -5,7 +5,7 @@ const passport = require("passport");
 const passportJWT = require("passport-jwt");
 const JWTStrategy = passportJWT.Strategy;
 const ExtractJWT = passportJWT.ExtractJwt;
-const cors = require("cors");
+// const cors = require("cors");
 const jwt = require("jsonwebtoken");
 
 const app = express();
@@ -46,7 +46,14 @@ passport.use(
 
 app.use(passport.initialize());
 
-app.use(cors());
+// app.use(cors());
+
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Replace '*' with specific origins if needed
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    next();
+});
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
