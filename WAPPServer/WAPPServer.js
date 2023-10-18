@@ -60,6 +60,8 @@ const MESSAGE_TYPE = {
     UPDATECONTACT: "UPDATECONTACT",
 };
 
+const delay = 1000;
+
 const generateToken = (user) => {
     const payload = { id: user.id, name: user.name, mobile: user.mobile };
     return jwt.sign(payload, secretKey, { expiresIn: "7d" });
@@ -198,8 +200,6 @@ app.get(
     "/chatlog/:messagefrom/:messageto",
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
-        const delay = 1000;
-
         try {
             const { messagefrom, messageto } = req.params;
             const key = `${messagefrom}_${messageto}_person`;
@@ -220,8 +220,6 @@ app.get(
     "/groupchatlog/:messageto/:id/:groupname",
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
-        const delay = 1000;
-
         try {
             const { messageto, id, groupname } = req.params;
             const key = `${messageto}_${id}_${groupname}_group`;
