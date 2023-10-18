@@ -198,11 +198,17 @@ app.get(
     "/chatlog/:messagefrom/:messageto",
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
+        const delay = 1000;
+
         try {
             const { messagefrom, messageto } = req.params;
             const key = `${messagefrom}_${messageto}_person`;
             const result = await getChatData(key);
-            res.json(result.rows);
+
+            setTimeout(() => {
+                res.json(result.rows);
+            }, delay);
+
         } catch (error) {
             console.error("Error getting group chat log:", error);
             res.status(500).json({ error: "Internal server error" });
@@ -214,11 +220,17 @@ app.get(
     "/groupchatlog/:messageto/:id/:groupname",
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
+        const delay = 1000;
+
         try {
             const { messageto, id, groupname } = req.params;
             const key = `${messageto}_${id}_${groupname}_group`;
             const result = await getChatData(key);
-            res.json(result.rows);
+
+            setTimeout(() => {
+                res.json(result.rows);
+            }, delay);
+
         } catch (error) {
             console.error("Error getting group chat log:", error);
             res.status(500).json({ error: "Internal server error" });
