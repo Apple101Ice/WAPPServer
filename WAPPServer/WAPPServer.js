@@ -23,6 +23,7 @@ const {
     insertChatMedia,
     deleteChatMedia,
     getChatData,
+    getGroupChatData,
     updateData,
     deleteGroup,
     resetDatabase,
@@ -60,7 +61,7 @@ const MESSAGE_TYPE = {
     UPDATECONTACT: "UPDATECONTACT",
 };
 
-const delay = 1000;
+const delay = 0;
 
 const generateToken = (user) => {
     const payload = { id: user.id, name: user.name, mobile: user.mobile };
@@ -80,47 +81,44 @@ const findWebSocketConnectionByClientId = (clientId) => {
 };
 
 wss.on("connection", (ws) => {
-    // console.log("someone connected");
     let clientId;
 
-    const sendmessagetoClient = (client, messageType) => {
+    const sendmessagetoClient = (client, messagetype) => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ message: messageType }));
+            client.send(JSON.stringify({ message: messagetype }));
         }
     };
 
     ws.on("message", async (data) => {
         const {
-            messagefrom,
-            senderName,
-            messageto,
-            messageType,
+            sendername,
+            receivername,
+            sender,
+            receiver,
+            messagetype,
             fileinfo,
             fileData,
-            messageContent,
+            messagecontent,
             memberof,
         } = JSON.parse(data);
 
-        if (messageType === MESSAGE_TYPE.SETNAME) {
-            clients.set(ws, messageContent);
-            clientId = messageContent;
-            // console.log("Client connected", messageContent);
-        } else if (messageType === MESSAGE_TYPE.PERSON) {
-            if (messagefrom && messageto) {
+        if (messagetype === MESSAGE_TYPE.SETNAME) {
+            clients.set(ws, messagecontent);
+            clientId = messagecontent;
+        } else if (messagetype === MESSAGE_TYPE.PERSON) {
+            if (sender && receiver) {
                 const senderId = clients.get(ws);
 
-                if (senderId === messagefrom) {
+                if (senderId === sender) {
                     const message = {
-                        messageId: generateUniqueId(),
-                        messagefrom,
-                        senderName,
-                        messageto,
-                        groupMessage: false,
-                        text: messageContent,
+                        sendername,
+                        receivername,
+                        sender,
+                        receiver,
+                        groupmessage: false,
+                        chatmessage: messagecontent,
                         timestamp: Date.now(),
                     };
-                    const key1 = `${messagefrom}_${messageto}_person`;
-                    const key2 = `${messageto}_${messagefrom}_person`;
 
                     let binaryData = null;
 
@@ -128,11 +126,14 @@ wss.on("connection", (ws) => {
                         binaryData = Buffer.from(fileData, "base64");
                     }
 
-                    await insertChatMedia(key1, key2, message, fileinfo, binaryData);
+                    const uniqueid = generateUniqueId();
 
-                    clients.forEach((client, id) => {
-                        if (client === messageto || client === ws) {
-                            sendmessagetoClient(id, MESSAGE_TYPE.PERSON);
+                    await insertChatMedia(uniqueid, message, fileinfo, binaryData);
+
+                    [sender, receiver].forEach((member) => {
+                        const recipient = findWebSocketConnectionByClientId(member);
+                        if (recipient) {
+                            sendmessagetoClient(recipient, MESSAGE_TYPE.PERSON);
                         }
                     });
                 } else {
@@ -143,22 +144,22 @@ wss.on("connection", (ws) => {
                     "Received a text message with missing sender or receiver information."
                 );
             }
-        } else if (messageType === MESSAGE_TYPE.GROUP) {
-            if (!memberof || !memberof.name || !memberof.mobile) {
+        } else if (messagetype === MESSAGE_TYPE.GROUP) {
+            if (!memberof.uniqueid) {
                 console.log("Received a group message with missing group information.");
                 return;
             }
 
             const message = {
-                messageId: generateUniqueId(),
-                messagefrom,
-                senderName,
-                messageto,
-                groupMessage: true,
-                text: messageContent,
+                sendername,
+                receivername,
+                sender,
+                receiver,
+                groupmessage: true,
+                groupuniqueid: memberof.uniqueid,
+                chatmessage: messagecontent,
                 timestamp: Date.now(),
             };
-            const key1 = `${messageto}_${memberof.id}_${memberof.name}_group`;
 
             let binaryData = null;
 
@@ -166,12 +167,16 @@ wss.on("connection", (ws) => {
                 binaryData = Buffer.from(fileData, "base64");
             }
 
-            await insertChatMedia(key1, key1, message, fileinfo, binaryData);
+            const uniqueid = generateUniqueId();
+
+            await insertChatMedia(uniqueid, message, fileinfo, binaryData);
 
             const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
                 .rows;
 
-            const chatGroup = usersGroup.find((group) => group.id === memberof.id);
+            const chatGroup = usersGroup.find(
+                (group) => group.uniqueid === memberof.uniqueid
+            );
 
             if (chatGroup) {
                 chatGroup.members.forEach((member) => {
@@ -197,18 +202,17 @@ wss.on("connection", (ws) => {
 });
 
 app.get(
-    "/chatlog/:messagefrom/:messageto",
+    "/chatlog/:sender/:receiver",
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
         try {
-            const { messagefrom, messageto } = req.params;
-            const key = `${messagefrom}_${messageto}_person`;
-            const result = await getChatData(key);
+            const { sender, receiver } = req.params;
+
+            const result = await getChatData(sender, receiver);
 
             setTimeout(() => {
                 res.json(result.rows);
             }, delay);
-
         } catch (error) {
             console.error("Error getting group chat log:", error);
             res.status(500).json({ error: "Internal server error" });
@@ -217,18 +221,15 @@ app.get(
 );
 
 app.get(
-    "/groupchatlog/:messageto/:id/:groupname",
+    "/groupchatlog",
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
         try {
-            const { messageto, id, groupname } = req.params;
-            const key = `${messageto}_${id}_${groupname}_group`;
-            const result = await getChatData(key);
-
+            const { groupuniqueid } = req.query;
+            const result = await getGroupChatData(groupuniqueid);
             setTimeout(() => {
                 res.json(result.rows);
             }, delay);
-
         } catch (error) {
             console.error("Error getting group chat log:", error);
             res.status(500).json({ error: "Internal server error" });
@@ -236,66 +237,52 @@ app.get(
     }
 );
 
-
 app.post(
-    "/deletechat/:usermobile",
+    "/deletechat",
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
-        const { chatids = [], chat_key, isgroup = false, groupid } = req.body;
-
-        let key1 = "";
-        let key2 = "";
-
-        let numbers = [];
+        const {
+            uniqueid,
+            sender,
+            receiver,
+            isgroup = false,
+            groupuniqueid,
+        } = req.body;
 
         const message = isgroup ? MESSAGE_TYPE.GROUP : MESSAGE_TYPE.PERSON;
 
-        if (isgroup) {
-            key1 = chat_key;
-            key2 = key1;
-            if (groupid) {
-                const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
-                    .rows;
-                const selectedGroup = usersGroup.find((group) => group.id === groupid);
-                if (selectedGroup) {
-                    for (const member of selectedGroup.members) {
-                        const recipient = findWebSocketConnectionByClientId(member.mobile);
-                        if (recipient) {
-                            broadcastmessagetoClient(
-                                recipient,
-                                JSON.stringify({ message: message })
-                            );
-                        }
-                    }
+        deleteChatMedia(uniqueid)
+            .then(async () => {
+                res.json({ message: "Chat deleted Successfully." });
+
+                let members = [];
+
+                if (isgroup) {
+                    const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
+                        .rows;
+
+                    const currentgroup = usersGroup.find(
+                        (group) => group.uniqueid === groupuniqueid
+                    );
+                    members = currentgroup.members.map((member) => member.mobile);
+                } else {
+                    members = [sender, receiver];
                 }
-            }
-        } else {
-            const parts = chat_key.split("_");
-            numbers = parts.filter((part) => !isNaN(part)).map(Number);
-            key1 = `${numbers[0]}_${numbers[1]}_person`;
-            key2 = `${numbers[1]}_${numbers[0]}_person`;
-        }
 
-        if ((key1 || key2) && chatids.length) {
-            deleteChatMedia(key1, key2, chatids)
-                .then(() => {
-                    res.json({ message: "Chat deleted Successfully." });
-
-                    for (const num of numbers) {
-                        const recipient = findWebSocketConnectionByClientId(num.toString());
-                        if (recipient) {
-                            broadcastmessagetoClient(
-                                recipient,
-                                JSON.stringify({ message: message })
-                            );
-                        }
+                members.forEach((number) => {
+                    const recipient = findWebSocketConnectionByClientId(number);
+                    if (recipient) {
+                        broadcastmessagetoClient(
+                            recipient,
+                            JSON.stringify({ message: message })
+                        );
                     }
-                })
-                .catch((error) => {
-                    console.error("Error deleting chat media:", error);
-                    res.status(500).json({ error: "Internal server error" });
                 });
-        }
+            })
+            .catch((error) => {
+                console.error("Error deleting chat media:", error);
+                res.status(500).json({ error: "Internal server error" });
+            });
     }
 );
 
@@ -517,7 +504,7 @@ app.get(
 
             if (userContact && Array.isArray(userContact.memberof)) {
                 updatedUserGroup = usersGroup.filter((group) =>
-                    userContact.memberof.some((memberOf) => memberOf.id === group.id)
+                    userContact.memberof.some((memberOf) => memberOf === group.uniqueid)
                 );
             }
 
@@ -604,18 +591,21 @@ app.post(
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
         const { usermobile } = req.params;
-        const { groupName, members } = req.body;
+        const { groupname, members } = req.body;
 
         try {
             const users = (await getTableData("users")).rows;
-            const groupAdmin = users.find((user) => user.mobile === usermobile);
+            const groupadmin = users.find((user) => user.mobile === usermobile);
+
+            const uniqueid = generateUniqueId();
 
             const newGroup = {
+                uniqueid: uniqueid,
                 contacttype: CONTACT_TYPE.GROUP,
                 mobile: usermobile,
-                name: groupName,
-                adminname: groupAdmin.name,
-                members: [groupAdmin, ...members],
+                name: groupname,
+                adminname: groupadmin.name,
+                members: [groupadmin, ...members],
             };
 
             await insertData(TABLES_NAME.TABLE_USERSGROUP, [newGroup]);
@@ -632,18 +622,8 @@ app.post(
                     const existingMemberOf =
                         usersContact[userContactIndex].memberof || [];
 
-                    const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
-                        .rows;
-
-                    const newlyCreatedGroupIndex = usersGroup.findIndex(
-                        (group) =>
-                            group.mobile === newGroup.mobile &&
-                            group.name === newGroup.name &&
-                            group.adminname === newGroup.adminname
-                    );
-
                     const updatedContact = {
-                        memberof: [...existingMemberOf, usersGroup[newlyCreatedGroupIndex]],
+                        memberof: [...existingMemberOf, uniqueid],
                     };
 
                     const condition = `mobile = '${member.mobile}'`;
@@ -672,21 +652,21 @@ app.post(
 );
 
 app.post(
-    "/updategroup/:groupid/:usermobile/:groupname",
+    "/updategroup",
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
-        const { groupid, groupname, usermobile } = req.params;
-        const { member } = req.body;
+        const { member, uniqueid } = req.body;
+        let addingmember = false;
 
         try {
             const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
                 .rows;
+            const userContact = (
+                await getTableData(TABLES_NAME.TABLE_USERSCONTACT)
+            ).rows.find((user) => user.mobile === member.mobile);
 
             const groupToUpdate = usersGroup.find(
-                (group) =>
-                    group.id === +groupid &&
-                    group.name === groupname &&
-                    group.mobile === usermobile
+                (group) => group.uniqueid === uniqueid
             );
 
             if (!groupToUpdate) {
@@ -701,43 +681,36 @@ app.post(
                 groupToUpdate.members.splice(memberIndex, 1);
             } else {
                 groupToUpdate.members.push(member);
+                addingmember = true;
             }
 
-            const condition1 = `id = '${groupid}'`;
+            const condition1 = `uniqueid = '${uniqueid}'`;
             await updateData(
                 TABLES_NAME.TABLE_USERSGROUP,
                 [{ members: groupToUpdate.members }],
                 condition1
             );
 
-            const usersContact = (await getTableData(TABLES_NAME.TABLE_USERSCONTACT))
-                .rows;
-
-            const userGroupContact = usersContact.find(
-                (user) => user.mobile === member.mobile
+            const groupIndex = userContact.memberof.findIndex(
+                (groupid) => groupid === uniqueid
             );
 
-            const groupIndex = userGroupContact.memberof.findIndex(
-                (group) =>
-                    group.id === +groupid &&
-                    group.mobile === usermobile &&
-                    group.name === groupname
-            );
-
-            if (groupIndex >= 0) {
-                userGroupContact.memberof.splice(groupIndex, 1);
+            if (groupIndex >= 0 && !addingmember) {
+                userContact.memberof.splice(groupIndex, 1);
             } else {
-                userGroupContact.memberof.push(groupToUpdate);
+                userContact.memberof.push(uniqueid);
             }
 
-            const condition2 = `mobile = '${userGroupContact.mobile}'`;
+            const condition2 = `mobile = '${member.mobile}'`;
             await updateData(
                 TABLES_NAME.TABLE_USERSCONTACT,
-                [{ memberof: userGroupContact.memberof }],
+                [{ memberof: userContact.memberof }],
                 condition2
             );
 
-            for (const groupMember of [...groupToUpdate.members, member]) {
+            const updatedMembers = [...groupToUpdate.members, member];
+
+            for (const groupMember of updatedMembers) {
                 const recipient = findWebSocketConnectionByClientId(groupMember.mobile);
                 if (recipient) {
                     broadcastmessagetoClient(
@@ -756,20 +729,16 @@ app.post(
 );
 
 app.delete(
-    "/leavegroup/:groupid/:groupmobile/:groupname/:usermobile",
+    "/leavegroup/:usermobile",
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
-        const { groupid, groupmobile, groupname, usermobile } = req.params;
+        const { usermobile } = req.params;
+        const { uniqueid } = req.body;
 
         try {
             const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
                 .rows;
-            const chatGroup = usersGroup.find(
-                (group) =>
-                    group.id === +groupid &&
-                    group.mobile === groupmobile &&
-                    group.name === groupname
-            );
+            const chatGroup = usersGroup.find((group) => group.uniqueid === uniqueid);
 
             if (!chatGroup) {
                 return res.status(404).send("Group not found");
@@ -794,10 +763,7 @@ app.delete(
             }
 
             const groupIndex = userGroupContact.memberof.findIndex(
-                (group) =>
-                    group.id === +groupid &&
-                    group.mobile === groupmobile &&
-                    group.name === groupname
+                (groupid) => groupid === uniqueid
             );
 
             if (groupIndex >= 0) {
@@ -812,10 +778,10 @@ app.delete(
                 await updateData(
                     TABLES_NAME.TABLE_USERSGROUP,
                     [chatGroup],
-                    `id = '${chatGroup.id}'`
+                    `uniqueid = '${chatGroup.uniqueid}'`
                 );
 
-                chatGroup.members.forEach((member) => {
+                [...chatGroup.members, { mobile: usermobile }].forEach((member) => {
                     const recipient = findWebSocketConnectionByClientId(member.mobile);
                     if (recipient) {
                         broadcastmessagetoClient(
@@ -824,14 +790,6 @@ app.delete(
                         );
                     }
                 });
-
-                const recipient = findWebSocketConnectionByClientId(usermobile);
-                if (recipient) {
-                    broadcastmessagetoClient(
-                        recipient,
-                        JSON.stringify({ message: MESSAGE_TYPE.UPDATECONTACT })
-                    );
-                }
 
                 return res.status(200).send("User removed from group.");
             } else {
@@ -849,17 +807,14 @@ app.delete(
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
         const { usermobile } = req.params;
-        const { groupmobile, groupname, groupadmin } = req.body;
+        const { uniqueid } = req.body;
 
         try {
             const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
                 .rows;
 
             const groupToDelete = usersGroup.find(
-                (_group) =>
-                    _group.mobile === groupmobile &&
-                    _group.name === groupname &&
-                    _group.adminname === groupadmin
+                (group) => group.uniqueid === uniqueid
             );
 
             if (!groupToDelete) {
@@ -880,10 +835,7 @@ app.delete(
                     (_contact) => _contact.mobile === member.mobile
                 );
                 const groupIndex = memberContact.memberof.findIndex(
-                    (group) =>
-                        group.mobile === groupmobile &&
-                        group.name === groupname &&
-                        group.adminname === groupadmin
+                    (groupid) => groupid === uniqueid
                 );
 
                 if (groupIndex >= 0) {
@@ -931,24 +883,14 @@ app.put(
     passport.authenticate("jwt", { session: false }),
     async (req, res) => {
         const { usermobile } = req.params;
-        const {
-            groupmobile,
-            groupname,
-            groupadmin,
-            editname,
-            editimage = null,
-            fileinfo = null,
-        } = req.body;
+        const { uniqueid, editname, editimage = null, fileinfo = null } = req.body;
 
         try {
             const usersGroup = (await getTableData(TABLES_NAME.TABLE_USERSGROUP))
                 .rows;
 
             const groupToEdit = usersGroup.find(
-                (_group) =>
-                    _group.mobile === groupmobile &&
-                    _group.name === groupname &&
-                    _group.adminname === groupadmin
+                (group) => group.uniqueid === uniqueid
             );
 
             if (!groupToEdit) {
@@ -990,31 +932,10 @@ app.put(
                     (_contact) => _contact.mobile === member.mobile
                 );
                 const groupIndex = memberContact.memberof.findIndex(
-                    (group) =>
-                        group.mobile === groupmobile &&
-                        group.name === groupname &&
-                        group.adminname === groupadmin
+                    (groupid) => groupid === uniqueid
                 );
 
                 if (groupIndex >= 0) {
-                    if (editname) {
-                        memberContact.memberof[groupIndex].name = editname;
-                    }
-
-                    if (editimage && fileinfo) {
-                        memberContact.memberof[groupIndex].groupimage = binaryData;
-                        memberContact.memberof[groupIndex].fileinfo = fileinfo;
-                    }
-
-                    const newMemberof = [...memberContact.memberof];
-                    newMemberof[groupIndex] = memberContact.memberof[groupIndex];
-                    const condition2 = `mobile = '${memberContact.mobile}'`;
-                    await updateData(
-                        TABLES_NAME.TABLE_USERSCONTACT,
-                        [{ memberof: newMemberof }],
-                        condition2
-                    );
-
                     const recipient = findWebSocketConnectionByClientId(
                         memberContact.mobile
                     );
@@ -1025,7 +946,6 @@ app.put(
                         );
                     }
                 } else {
-
                 }
             }
 

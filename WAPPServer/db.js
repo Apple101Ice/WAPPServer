@@ -13,16 +13,9 @@ const pool = new Pool({
     ssl: {
         rejectUnauthorized: false,
     },
-    port: 5432,
+    port: process.env.PORT || 5432,
 });
 
-// const pool = new Pool({
-//     host: "localhost",
-//     database: "postgres",
-//     user: "postgres",
-//     password: "qwerty123",
-//     port: 5432,
-// });
 
 pool.on("connect", () => {
     console.log("Connected to the database");
@@ -104,6 +97,7 @@ const insertData = async (tableName, dataArray) => {
             })
             .join(", ");
         const values = dataArray.flatMap((item) => Object.values(item));
+
         const insertQuery = `INSERT INTO ${tableName} (${columns}) VALUES ${placeholders}`;
 
         await client.query(insertQuery, values);
@@ -167,37 +161,39 @@ const getTableData = async (tableName) => {
 };
 
 const insertChatMedia = async (
-    chat_key1,
-    chat_key2,
-    chat_message,
+    uniqueid,
+    message,
     fileinfo = {},
     binaryData = null
 ) => {
     try {
         const insertQuery =
-            "INSERT INTO chatmedia (chat_key, chat_message, data, fileinfo) VALUES ($1, $2, $3, $4)";
+            "INSERT INTO chatmedia (uniqueid, sendername, receivername, sender, receiver, groupmessage, groupuniqueid, chatmessage, timestamp, data, fileinfo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
 
-        if (chat_key1 === chat_key2) {
-            await pool.query(insertQuery, [
-                chat_key1,
-                chat_message,
-                binaryData,
-                fileinfo,
-            ]);
-        } else {
-            await pool.query(insertQuery, [
-                chat_key1,
-                chat_message,
-                binaryData,
-                fileinfo,
-            ]);
-            await pool.query(insertQuery, [
-                chat_key2,
-                chat_message,
-                binaryData,
-                fileinfo,
-            ]);
-        }
+        const {
+            sendername,
+            receivername,
+            sender,
+            receiver,
+            groupmessage,
+            groupuniqueid,
+            chatmessage,
+            timestamp,
+        } = message;
+
+        await pool.query(insertQuery, [
+            uniqueid,
+            sendername,
+            receivername,
+            sender,
+            receiver,
+            groupmessage,
+            groupuniqueid,
+            chatmessage,
+            timestamp,
+            binaryData,
+            fileinfo,
+        ]);
         console.log("Media inserted successfully");
     } catch (error) {
         console.error("Error inserting media:", error);
@@ -205,12 +201,11 @@ const insertChatMedia = async (
     }
 };
 
-const deleteChatMedia = async (chatKey1, chatKey2, chatIds) => {
+const deleteChatMedia = async (uniqueid) => {
     try {
-        const deleteQuery =
-            "DELETE FROM chatmedia WHERE (chat_key = $1 OR chat_key = $2) AND id = ANY($3)";
+        const deleteQuery = "DELETE FROM chatmedia WHERE uniqueid = $1";
 
-        await pool.query(deleteQuery, [chatKey1, chatKey2, chatIds]);
+        await pool.query(deleteQuery, [uniqueid]);
         console.log("Media deleted successfully");
     } catch (error) {
         console.error("Error deleting media:", error);
@@ -218,11 +213,24 @@ const deleteChatMedia = async (chatKey1, chatKey2, chatIds) => {
     }
 };
 
-const getChatData = async (chat_key) => {
+const getChatData = async (sender, receiver) => {
     try {
-        const getQuery = "SELECT * FROM chatmedia WHERE chat_key = $1";
+        const getQuery =
+            "SELECT * FROM chatmedia WHERE (sender = $1 OR sender = $2) AND (receiver = $1 OR receiver = $2) AND groupmessage = 'false'";
 
-        return await pool.query(getQuery, [chat_key]);
+        return await pool.query(getQuery, [sender, receiver]);
+    } catch (error) {
+        console.error("Error retrieving chat data:", error);
+        throw error;
+    }
+};
+
+const getGroupChatData = async (groupuniqueid) => {
+    try {
+        const getQuery =
+            "SELECT * FROM chatmedia WHERE groupuniqueid = $1 AND groupmessage = 'true'";
+
+        return await pool.query(getQuery, [groupuniqueid]);
     } catch (error) {
         console.error("Error retrieving chat data:", error);
         throw error;
@@ -294,19 +302,27 @@ const createUsersContactTable = () => `
     (id SERIAL PRIMARY KEY,
     mobile VARCHAR(255) NOT NULL UNIQUE,
     contacts JSON[],
-    memberof JSON[]);
+    memberof TEXT[]);
 `;
 
 const createChatMediaTable = () => `
     (id SERIAL PRIMARY KEY,
-    chat_key VARCHAR(255) NOT NULL,
-    chat_message JSON,
+    uniqueid VARCHAR(255) NOT NULL,
+    sendername VARCHAR(255) NOT NULL,
+    receivername VARCHAR(255) NOT NULL,
+    sender VARCHAR(255) NOT NULL,
+    receiver VARCHAR(255) NOT NULL,
+    groupmessage VARCHAR(255) NOT NULL,
+    groupuniqueid VARCHAR(255),
+    chatmessage TEXT,
+    timestamp VARCHAR(255) NOT NULL,
     data BYTEA,
     fileinfo JSON);
 `;
 
 const createUsersGroupTable = () => `
     (id SERIAL PRIMARY KEY,
+    uniqueid VARCHAR(255) NOT NULL UNIQUE,
     groupimage BYTEA,
     fileinfo JSON,
     contacttype VARCHAR(255) NOT NULL,
@@ -324,6 +340,7 @@ module.exports = {
     insertChatMedia,
     deleteChatMedia,
     getChatData,
+    getGroupChatData,
     updateData,
     deleteGroup,
     resetDatabase,
